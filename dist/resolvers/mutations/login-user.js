@@ -18,26 +18,32 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-require("reflect-metadata");
-const express_1 = __importDefault(require("express"));
-const apollo_server_express_1 = require("apollo-server-express");
 const typeorm_1 = require("typeorm");
-const schema_1 = __importDefault(require("./schema"));
-const resolvers_1 = __importDefault(require("./resolvers"));
+const user_1 = require("../../entities/user");
+const apollo_server_core_1 = require("apollo-server-core");
+const bcrypt_1 = require("bcrypt");
+const jsonwebtoken_1 = require("jsonwebtoken");
+const lodash_1 = require("lodash");
 const dotenv = __importStar(require("dotenv"));
-// import { verify } from 'jsonwebtoken';
-exports.default = async () => {
+exports.default = async (_root, { input }) => {
     dotenv.config();
-    const app = express_1.default();
-    await typeorm_1.createConnection();
-    const server = new apollo_server_express_1.ApolloServer({
-        typeDefs: schema_1.default,
-        resolvers: resolvers_1.default,
-    });
-    server.applyMiddleware({ app, cors: { origin: ['http://localhost:3000'] } });
-    return app;
+    if (!input.email || !input.password) {
+        throw new apollo_server_core_1.UserInputError('field_empty', { errorKey: 'empty' });
+    }
+    const userRepo = typeorm_1.getRepository(user_1.User);
+    const user = await userRepo.findOne({ where: { email: input.email } });
+    if (!user) {
+        throw new Error('No user found');
+    }
+    const isValid = await bcrypt_1.compare(input.password, user.password);
+    if (!isValid) {
+        throw new Error('Incorrect password');
+    }
+    var secret = String(process.env.SECRET);
+    const token = jsonwebtoken_1.sign({
+        user: lodash_1.pick(user, ['id', 'email']),
+    }, secret, { expiresIn: "1d" });
+    var webToken = { token: token };
+    return webToken;
 };
